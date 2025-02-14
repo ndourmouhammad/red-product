@@ -260,9 +260,216 @@ const signin = async (req, res) => {
     }
 };
 
+const resetPassword = async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({
+            success: false,
+            message: 'Veuillez fournir un email'
+        });
+    }
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email introuvable'
+            });
+        }
+
+        if (!user.verified) {
+            return res.status(400).json({
+                success: false,
+                message: "Votre compte n'est pas encore vérifié. Veuillez vérifier votre boîte e-mail."
+            });
+        }
+
+        // Générer un token JWT
+        const token = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' } // Le token expire après 1 heure
+        );
+
+        // Hasher le token et le stocker dans la base de données
+        const hashedToken = await bcrypt.hash(token, 10);
+
+        const newPasswordReset = new Userverification({
+            userId: user._id,
+            uniqueString: hashedToken,
+            createdAt: Date.now(),
+            expiredAt: Date.now() + 3600000 // Lien valide pendant 1 heure
+        });
+
+        await newPasswordReset.save();
+
+        // Envoyer un e-mail avec le lien de réinitialisation
+        const resetUrl = `http://localhost:5000/api/users/reset-password/${user._id}/${token}`;
+        const mailOptions = {
+            from: process.env.AUTH_EMAIL,
+            to: email,
+            subject: "Réinitialisation de votre mot de passe",
+            html: `<p>Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le lien ci-dessous pour procéder :</p>
+                   <p><a href="${resetUrl}">Réinitialiser mon mot de passe</a></p>
+                   <p>Ce lien expirera dans 1 heure.</p>`
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error(error);
+                return res.status(500).json({
+                    success: false,
+                    message: "Erreur lors de l'envoi de l'e-mail de réinitialisation"
+                });
+            } else {
+                console.log('E-mail de réinitialisation envoyé :', info.response);
+                return res.status(200).json({
+                    success: true,
+                    message: 'Un e-mail de réinitialisation a été envoyé à votre adresse e-mail.'
+                });
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: 'Erreur serveur, veuillez réessayer plus tard'
+        });
+    }
+};
+
+const verifyResetPasswordLink = async (req, res) => {
+    const { userId, uniqueString } = req.params;
+
+    try {
+        // Trouver l'enregistrement de réinitialisation
+        const resetRecord = await Userverification.findOne({ userId });
+
+        if (!resetRecord) {
+            return res.status(400).json({
+                success: false,
+                message: 'Lien de réinitialisation invalide ou expiré'
+            });
+        }
+
+        // Vérifier si le lien a expiré
+        if (resetRecord.expiredAt < Date.now()) {
+            await Userverification.deleteOne({ userId });
+            return res.status(400).json({
+                success: false,
+                message: 'Le lien de réinitialisation a expiré'
+            });
+        }
+
+        // Comparer la chaîne unique
+        const isValid = await bcrypt.compare(uniqueString, resetRecord.uniqueString);
+        if (!isValid) {
+            return res.status(400).json({
+                success: false,
+                message: 'Lien de réinitialisation invalide'
+            });
+        }
+
+        // Si tout est valide, rediriger l'utilisateur vers la page de réinitialisation
+        return res.sendFile(path.join(__dirname, '../views/reset-password.html'));
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: 'Erreur serveur, veuillez réessayer plus tard'
+        });
+    }
+};
+
+const updatePassword = async (req, res) => {
+    console.log("Début de la fonction updatePassword");
+
+    const { token, newPassword } = req.body;
+    console.log("Données reçues :", { token, newPassword });
+
+    if (!token || !newPassword) {
+        console.log("Données manquantes : token ou newPassword absent");
+        return res.status(400).json({
+            success: false,
+            message: 'Données manquantes'
+        });
+    }
+
+    try {
+        console.log("Tentative de décodage du token...");
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log("Token décodé :", decoded);
+
+        const { userId } = decoded;
+        console.log("User ID extrait du token :", userId);
+
+        console.log("Recherche de l'enregistrement de réinitialisation...");
+        const resetRecord = await Userverification.findOne({ userId });
+        console.log("Enregistrement de réinitialisation trouvé :", resetRecord);
+
+        if (!resetRecord) {
+            console.log("Aucun enregistrement de réinitialisation trouvé pour cet utilisateur");
+            return res.status(400).json({
+                success: false,
+                message: 'Lien de réinitialisation invalide ou expiré'
+            });
+        }
+
+        console.log("Vérification de l'expiration du lien...");
+        if (resetRecord.expiredAt < Date.now()) {
+            console.log("Le lien de réinitialisation a expiré");
+            await Userverification.deleteOne({ userId });
+            return res.status(400).json({
+                success: false,
+                message: 'Le lien de réinitialisation a expiré'
+            });
+        }
+
+        console.log("Comparaison du token...");
+        const isValid = await bcrypt.compare(token, resetRecord.uniqueString);
+        console.log("Résultat de la comparaison :", isValid);
+
+        if (!isValid) {
+            console.log("Le token ne correspond pas");
+            return res.status(400).json({
+                success: false,
+                message: 'Lien de réinitialisation invalide'
+            });
+        }
+
+        console.log("Hachage du nouveau mot de passe...");
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        console.log("Mot de passe haché :", hashedPassword);
+
+        console.log("Mise à jour du mot de passe de l'utilisateur...");
+        await User.updateOne({ _id: userId }, { password: hashedPassword });
+        console.log("Mot de passe mis à jour avec succès");
+
+        console.log("Suppression de l'enregistrement de réinitialisation...");
+        await Userverification.deleteOne({ userId });
+        console.log("Enregistrement de réinitialisation supprimé");
+
+        return res.status(200).json({
+            success: true,
+            message: 'Mot de passe mis à jour avec succès'
+        });
+    } catch (error) {
+        console.error("Erreur dans updatePassword :", error);
+        return res.status(500).json({
+            success: false,
+            message: 'Erreur serveur, veuillez réessayer plus tard'
+        });
+    }
+};
+
 module.exports = {
     signup,
     verifyUser,
     verifiedPage,
-    signin
+    signin,
+    resetPassword,
+    updatePassword,
+    verifyResetPasswordLink
 };
