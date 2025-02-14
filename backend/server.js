@@ -1,17 +1,21 @@
-import express from "express";
-import dotenv from "dotenv";
-import { connectDB } from "./config/db.js";
+const express = require('express');
+const dotenv = require('dotenv');
+const authRoutes = require('./routes/User');
+const connectDB = require('./config/db'); // Importez la fonction connectDB
 
 dotenv.config();
+
+// Connexion à MongoDB
+connectDB();
 
 const app = express();
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 
-const port = process.env.PORT || 5000;
+// Routes
+app.use('/api/users', authRoutes);
 
-app.listen(port, () => {
-    connectDB();
-    console.log(`Server running on port ${port}`);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
