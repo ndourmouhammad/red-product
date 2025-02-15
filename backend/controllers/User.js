@@ -1,4 +1,4 @@
-require('dotenv').config(); 
+require('dotenv').config();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require("nodemailer");
@@ -30,10 +30,10 @@ const signup = async (req, res) => {
     name = name?.trim();
     email = email?.trim();
     password = password?.trim();
-    
+
 
     switch (true) {
-        case !name || !email || !password :
+        case !name || !email || !password:
             return res.status(400).json({ success: false, message: 'Veuillez remplir tous les champs' });
 
         case !/^[a-zA-Z ]+$/.test(name):
@@ -45,7 +45,7 @@ const signup = async (req, res) => {
         case password.length < 6:
             return res.status(400).json({ success: false, message: 'Le mot de passe doit contenir au moins 6 caractères' });
 
-        
+
 
         default:
             break;
@@ -83,9 +83,10 @@ const sendVerificationEmail = ({ _id, email }, res) => {
         from: process.env.AUTH_EMAIL,
         to: email,
         subject: "Verification de mail",
-        html: `<p>Verify your email address to complete the signup and login into your account.</p>
-        <p>This link <b>expires in 6 hours</b>.</p>
-        <p>Press <a href="${currentUrl + "verify/" + _id + "/" + uniqueString}">here</a> to proceed</p>`
+        html: `<p>Vérifiez votre adresse e-mail pour compléter inscription et vous connecter à votre compte.</p>
+        <p>Ce lien <b>expire dans 6 heures</b>.</p>
+        <p>Cliquez <a href="${currentUrl + "verify/" + _id + "/" + uniqueString}">ici</a> pour continuer</p>`
+
     };
 
     const saltRounds = 10;
@@ -106,15 +107,15 @@ const sendVerificationEmail = ({ _id, email }, res) => {
                         .sendMail(mailOptions)
                         .then(() => {
                             return res.json({
-                                status: "PENDING",
-                                message: "Verification email sent",
+                                status: "EN ATTENTE",
+                                message: "L'adresse e-mail de vérification a été envoyée",
                             });
                         })
                         .catch((error) => {
                             console.log(error);
                             return res.json({
                                 status: false,
-                                message: "Verification email failed",
+                                message: "Email de vérification non envoyé",
                             });
                         });
                 })
@@ -122,14 +123,14 @@ const sendVerificationEmail = ({ _id, email }, res) => {
                     console.log(error);
                     return res.json({
                         status: false,
-                        message: "Couldn't save verification email data"
+                        message: "Ne peut pas sauvegarder le lien de vérification",
                     });
                 });
         })
         .catch(() => {
             return res.json({
                 status: false,
-                message: "An error occured while hashing email data",
+                message: "Une erreur a survenu lors du hachage de la chaîne unique",
             });
         });
 };
@@ -151,16 +152,16 @@ const verifyUser = (req, res) => {
                             User
                                 .deleteOne({ _id: userId })
                                 .then(() => {
-                                    let message = "Link has expired. Please sign up again";
+                                    let message = "Lien de vérification expiré";
                                     return res.redirect('/user/verified/error=true&message=' + message);
                                 })
                                 .catch(error => {
-                                    let message = "Clearing user with expired unique string failed";
+                                    let message = "Échec de la suppression de l'utilisateur avec une chaîne unique expirée.";
                                     return res.redirect('/user/verified/error=true&message=' + message);
                                 });
                         })
                         .catch((error) => {
-                            let message = "An error occurred while clearing expired user verification record";
+                            let message = "Une erreur s'est produite lors de la suppression de l'enregistrement de vérification utilisateur expiré.";
                             return res.redirect('/user/verified/error=true&message=' + message);
                         });
                 } else {
@@ -177,31 +178,31 @@ const verifyUser = (req, res) => {
                                                 return res.sendFile(path.join(__dirname, "../views/verified.html"));
                                             })
                                             .catch(error => {
-                                                let message = "An error occurred while finalizing successful verification";
+                                                let message = "Une erreur s'est produite lors de la finalisation de la vérification réussie.";
                                                 return res.redirect('/user/verified/error=true&message=' + message);
                                             });
                                     })
                                     .catch(error => {
-                                        let message = "An error occurred while updating user record to show verified";
+                                        let message = "Une erreur s'est produite lors de la mise à jour de l'enregistrement utilisateur pour indiquer la vérification.";
                                         return res.redirect('/user/verified/error=true&message=' + message);
                                     });
                             } else {
-                                let message = "Invalid verification details passed. Check your inbox";
+                                let message = "Détails de vérification invalides fournis. Vérifiez votre boîte de réception.";
                                 return res.redirect('/user/verified/error=true&message=' + message);
                             }
                         })
                         .catch(error => {
-                            let message = "An error occurred while comparing unique strings.";
+                            let message = "Une erreur s'est produite lors de la comparaison des chaînes uniques.";
                             return res.redirect('/user/verified/error=true&message=' + message);
                         });
                 }
             } else {
-                let message = "Account record does not exist or has already been verified";
+                let message = "L'enregistrement du compte n'existe pas ou a déjà été vérifié.";
                 return res.redirect('/user/verified/error=true&message=' + message);
             }
         })
         .catch((error) => {
-            let message = "Something went wrong";
+            let message = "Quelque chose s'est mal passé.";
             return res.redirect('/user/verified/error=true&message=' + message);
         });
 };
@@ -286,26 +287,26 @@ const resetPassword = async (req, res) => {
             });
         }
 
-        // Générer un token JWT
+
         const token = jwt.sign(
             { userId: user._id },
             process.env.JWT_SECRET,
-            { expiresIn: '1h' } // Le token expire après 1 heure
+            { expiresIn: '1h' }
         );
 
-        // Hasher le token et le stocker dans la base de données
+
         const hashedToken = await bcrypt.hash(token, 10);
 
         const newPasswordReset = new Userverification({
             userId: user._id,
             uniqueString: hashedToken,
             createdAt: Date.now(),
-            expiredAt: Date.now() + 3600000 // Lien valide pendant 1 heure
+            expiredAt: Date.now() + 3600000
         });
 
         await newPasswordReset.save();
 
-        // Envoyer un e-mail avec le lien de réinitialisation
+
         const resetUrl = `http://localhost:5000/api/users/reset-password/${user._id}/${token}`;
         const mailOptions = {
             from: process.env.AUTH_EMAIL,
@@ -344,7 +345,7 @@ const verifyResetPasswordLink = async (req, res) => {
     const { userId, uniqueString } = req.params;
 
     try {
-        // Trouver l'enregistrement de réinitialisation
+
         const resetRecord = await Userverification.findOne({ userId });
 
         if (!resetRecord) {
@@ -354,7 +355,7 @@ const verifyResetPasswordLink = async (req, res) => {
             });
         }
 
-        // Vérifier si le lien a expiré
+
         if (resetRecord.expiredAt < Date.now()) {
             await Userverification.deleteOne({ userId });
             return res.status(400).json({
@@ -363,7 +364,7 @@ const verifyResetPasswordLink = async (req, res) => {
             });
         }
 
-        // Comparer la chaîne unique
+
         const isValid = await bcrypt.compare(uniqueString, resetRecord.uniqueString);
         if (!isValid) {
             return res.status(400).json({
@@ -372,7 +373,7 @@ const verifyResetPasswordLink = async (req, res) => {
             });
         }
 
-        // Si tout est valide, rediriger l'utilisateur vers la page de réinitialisation
+
         return res.sendFile(path.join(__dirname, '../views/reset-password.html'));
     } catch (error) {
         console.error(error);
@@ -439,17 +440,10 @@ const updatePassword = async (req, res) => {
             });
         }
 
-        console.log("Hachage du nouveau mot de passe...");
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        console.log("Mot de passe haché :", hashedPassword);
-
-        console.log("Mise à jour du mot de passe de l'utilisateur...");
         await User.updateOne({ _id: userId }, { password: hashedPassword });
-        console.log("Mot de passe mis à jour avec succès");
-
-        console.log("Suppression de l'enregistrement de réinitialisation...");
         await Userverification.deleteOne({ userId });
-        console.log("Enregistrement de réinitialisation supprimé");
+
 
         return res.status(200).json({
             success: true,
@@ -464,6 +458,23 @@ const updatePassword = async (req, res) => {
     }
 };
 
+// LOGOUT
+const logout = async (req, res) => {
+    try {
+        res.clearCookie('token');
+        return res.status(200).json({
+            success: true,
+            message: 'Deconnexion avec succes'
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: 'Erreur serveur, veuillez réessayer plus tard'
+        });
+    }
+};
+
 module.exports = {
     signup,
     verifyUser,
@@ -471,5 +482,6 @@ module.exports = {
     signin,
     resetPassword,
     updatePassword,
-    verifyResetPasswordLink
+    verifyResetPasswordLink,
+    logout
 };
